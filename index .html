@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Belgo | Premium Dessert Lounge</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --belgo: #8CC63E; --pop: #FF9800; --bg: #fdfdfd; --text-dark: #2d3436; }
+        body { font-family: 'Poppins', sans-serif; background: var(--belgo); margin: 0; padding-bottom: 50px; color: white; overflow-x: hidden; }
+        
+        /* Transparent Logo Header */
+        header { padding: 45px 15px 15px; text-align: center; }
+        .logo-img { height: 115px; max-width: 270px; object-fit: contain; }
+
+        /* Search Bar */
+        .search-container { padding: 0 25px 25px; margin-top: 5px; }
+        .search-bar { width: 100%; padding: 15px 25px; border-radius: 50px; border: none; outline: none; font-size: 14px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); box-sizing: border-box; font-family: inherit; }
+
+        /* Premium Popular Slider */
+        #hero-slider { width: 100%; height: 270px; position: relative; overflow: hidden; margin-bottom: 15px; }
+        .slide-container { width: 100%; height: 100%; position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transform: translateY(20px); transition: all 0.7s ease; }
+        .slide-container.active { opacity: 1; visibility: visible; transform: translateY(0); }
+        
+        .img-wrapper { position: relative; display: inline-block; padding-top: 15px; }
+        .slide-img { width: 240px; height: 150px; border-radius: 30px; object-fit: cover; background: rgba(255,255,255,0.2); padding: 5px; backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        
+        .pop-badge { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: white; color: var(--belgo); padding: 5px 18px; border-radius: 30px; font-size: 10px; font-weight: 800; display: flex; align-items: center; gap: 5px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); animation: pulse-glow 2s infinite ease-in-out; white-space: nowrap; z-index: 10; }
+        
+        @keyframes pulse-glow { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.06); } }
+        .pop-name { font-size: 1.3rem; font-weight: 700; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); text-align: center; }
+
+        /* Main Menu Section */
+        #full-menu { background: var(--bg); border-top-left-radius: 45px; border-top-right-radius: 45px; padding-top: 35px; color: var(--text-dark); min-height: 600px; }
+        .menu-section { padding: 10px 0 25px 25px; }
+        .menu-section h3 { font-size: 1.1rem; border-left: 6px solid var(--belgo); padding-left: 14px; margin-bottom: 20px; text-transform: uppercase; color: #444; letter-spacing: 0.5px; }
+        
+        .items-scroll { display: flex; gap: 18px; overflow-x: auto; scrollbar-width: none; padding-right: 25px; padding-bottom: 10px; }
+        .items-scroll::-webkit-scrollbar { display: none; }
+
+        /* Uniform Size Item Cards */
+        .menu-item { flex: 0 0 160px; background: white; border-radius: 28px; overflow: hidden; box-shadow: 0 8px 22px rgba(0,0,0,0.06); border: 1px solid #f2f2f2; transition: transform 0.2s; }
+        .menu-item:active { transform: scale(0.96); }
+        
+        .item-img { width: 100%; height: 115px; object-fit: cover; display: block; background: #fafafa; }
+        .item-info { padding: 14px; text-align: center; }
+        .item-name { font-size: 13px; font-weight: 600; min-height: 36px; margin-bottom: 6px; color: #333; line-height: 1.3; }
+        .item-price { font-weight: 800; color: var(--belgo); font-size: 16px; }
+
+        /* Empty Search Message */
+        #empty-msg { text-align: center; padding: 50px 20px; color: #999; font-size: 14px; display: none; }
+    </style>
+</head>
+<body>
+
+<header id="shopLogo"></header>
+
+<div class="search-container">
+    <input type="text" id="searchInput" class="search-bar" placeholder="Search for desserts..." onkeyup="searchMenu()">
+</div>
+
+<div id="hero-slider">
+    <div id="popular-list"></div>
+</div>
+
+<div id="full-menu">
+    <div id="menu-content"></div>
+    <div id="empty-msg">No items found matching your search.</div>
+</div>
+
+<script>
+    // FIREBASE CONFIG
+    const firebaseConfig = {
+        apiKey: "AIzaSyB3qk4sGyqcbVX-OPG1ngEmgwmN83YYOcK",
+        databaseURL: "https://belgo-menu-b2-default-rtdb.firebaseio.com",
+        projectId: "belgo-menu-b2"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let fullMenuData = {};
+
+    // Load Logo
+    db.ref('settings/logo').on('value', snap => {
+        if(snap.val()) document.getElementById('shopLogo').innerHTML = `<img src="${snap.val()}" class="logo-img">`;
+    });
+
+    // Load Popular Slider
+    db.ref('popular').on('value', snap => {
+        const data = snap.val();
+        const container = document.getElementById('popular-list');
+        if(data) {
+            const items = Object.values(data);
+            container.innerHTML = items.map((item, i) => `
+                <div class="slide-container ${i === 0 ? 'active' : ''}">
+                    <div class="img-wrapper">
+                        <div class="pop-badge">⭐ Popular Choice</div>
+                        <img src="${item.i}" class="slide-img">
+                    </div>
+                    <span class="pop-name">${item.n}</span>
+                </div>`).join('');
+            if(items.length > 1) startSlider();
+            document.getElementById('hero-slider').style.display = 'block';
+        } else {
+            document.getElementById('hero-slider').style.display = 'none';
+        }
+    });
+
+    // Auto Slider Logic
+    let slideIdx = 0;
+    let slideTimer;
+    function startSlider() {
+        if(slideTimer) clearInterval(slideTimer);
+        slideTimer = setInterval(() => {
+            const slides = document.querySelectorAll('.slide-container');
+            if(slides.length === 0) return;
+            slides[slideIdx].classList.remove('active');
+            slideIdx = (slideIdx + 1) % slides.length;
+            slides[slideIdx].classList.add('active');
+        }, 4000);
+    }
+
+    // Load Main Menu
+    db.ref('menu').on('value', snap => {
+        fullMenuData = snap.val() || {};
+        renderMenu(fullMenuData);
+    });
+
+    function renderMenu(data) {
+        const container = document.getElementById('menu-content');
+        const emptyMsg = document.getElementById('empty-msg');
+        container.innerHTML = '';
+        
+        const cats = Object.keys(data).sort();
+        if(cats.length === 0) {
+            emptyMsg.style.display = 'block';
+            return;
+        }
+        emptyMsg.style.display = 'none';
+
+        cats.forEach(cat => {
+            let catHtml = `<div class="menu-section"><h3>${cat.replace(/^\d+_/, '')}</h3><div class="items-scroll">`;
+            const items = Object.values(data[cat]);
+            items.forEach(item => {
+                catHtml += `
+                    <div class="menu-item">
+                        <img src="${item.i}" class="item-img" loading="lazy">
+                        <div class="item-info">
+                            <div class="item-name">${item.n}</div>
+                            <div class="item-price">₹${item.p}</div>
+                        </div>
+                    </div>`;
+            });
+            container.innerHTML += catHtml + `</div></div>`;
+        });
+    }
+
+    function searchMenu() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        const filteredData = {};
+        let found = false;
+
+        Object.keys(fullMenuData).forEach(cat => {
+            const items = Object.values(fullMenuData[cat]).filter(item => 
+                item.n.toLowerCase().includes(query)
+            );
+            if(items.length > 0) {
+                filteredData[cat] = items;
+                found = true;
+            }
+        });
+
+        renderMenu(filteredData);
+        // If searching, hide slider for better focus
+        document.getElementById('hero-slider').style.display = (query.length > 0) ? 'none' : 'block';
+    }
+</script>
+</body>
+</html>
